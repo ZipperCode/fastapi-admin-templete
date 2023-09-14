@@ -1,17 +1,17 @@
 from datetime import datetime
 from typing import Any
 
+from sqlalchemy.ext.asyncio import AsyncAttrs
 from sqlalchemy.ext.declarative import declarative_base, as_declarative
 from sqlalchemy import Column, text, Integer, DateTime, Boolean, String
-from sqlalchemy.orm import declared_attr
+from sqlalchemy.orm import declared_attr, DeclarativeBase, Mapped, mapped_column
+
 
 # 数据库模型基类
 # Base = declarative_base()
 
-
-@as_declarative()
-class Base:
-    id = Column(Integer, primary_key=True, comment='主键ID')
+class Base(DeclarativeBase):
+    id: Mapped[int] = mapped_column(primary_key=True, comment="主键ID")
     __name__: str
 
     # Generate __tablename__ automatically

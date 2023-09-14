@@ -1,14 +1,19 @@
-from typing import Callable
-
-from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
+from sqlalchemy import URL, create_engine
+from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import sessionmaker
 
-SQLALCHEMY_DATABASE_URI = "mysql+pymysql://root:zzp949389@localhost:3306/fast_admin?charset=utf8mb4"
+from app.core.config import get_settings
 
-# engine = create_engine(SQLALCHEMY_DATABASE_URI, pool_pre_ping=True)
-# SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+settings = get_settings()
 
-async_egn = create_async_engine(SQLALCHEMY_DATABASE_URI)
+# async_engine = create_async_engine(
+#     URL.create("mysql+aiomysql", "root", "zzp949389", "localhost", 3306, "mysql"), pool_recycle=1500
+# )
+#
+# AsyncSessionLocal = async_sessionmaker(async_engine, class_=AsyncSession)
 
-# 创建session元类
-async_session_local: Callable[..., AsyncSession] = sessionmaker(async_egn)
+engine = create_engine(
+    URL.create("mysql+aiomysql", "root", "zzp949389", "localhost", 3306, "mysql"), pool_recycle=1500
+)
+
+SessionLocal = sessionmaker(engine)

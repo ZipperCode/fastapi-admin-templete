@@ -20,8 +20,8 @@ passlib = "^1.7.4"
 bcrypt = "^4.0.1"
 pytz = "^2023.3.post1"
 aiomysql = "^0.2.0"
-databases = "^0.8.0"
-sqlalchemy = "^1.4.49"
+sqlalchemy = "^2.0.20"
+asyncio = "^3.4.3"
 
 
 [build-system]
