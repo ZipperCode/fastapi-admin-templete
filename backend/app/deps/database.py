@@ -1,20 +1,10 @@
-from typing import Generator
-
-from sqlalchemy.orm import sessionmaker
-
-from app.db.session import SessionLocal
+from app.db.session import AsyncSessionLocal
 
 
-# async def async_session():
-#
-#     async with AsyncSessionLocal() as session:
-#         try:
-#             yield session
-#         except Exception:
-#             session.rollback()
-#             raise
-
-
-def create_session() -> SessionLocal:
-    with SessionLocal() as session:
-        yield session
+async def get_db():
+    async with AsyncSessionLocal() as session:
+        try:
+            yield session
+        except Exception:
+            session.rollback()
+            raise

@@ -1,10 +1,26 @@
-from ctypes import Union
 from datetime import datetime, date
-from typing import List
+from typing import List, Union, Any, Annotated
 from typing_extensions import Literal
 
 from fastapi import Query
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
+
+from app.consts.http import HttpResp
+from app.core.exceptions import AppException
+from app.schemas.validators.user import PasswordValidator
+
+
+class SystemUserCreateIn(BaseModel):
+    """管理员新增参数"""
+    role_ids: List[int] = Field(alias='roleIds')  # 角色ID
+    dept_ids: List[int] = Field(alias='deptIds')  # 部门ID
+    post_ids: List[int] = Field(alias='postIds')  # 岗位ID
+    username: str = Field(min_length=2, max_length=20)  # 账号
+    nickname: str = Field(min_length=2, max_length=30)  # 昵称
+    password: Annotated[str, PasswordValidator]  # 密码
+    avatar: str  # 头像
+    sort: int = Field(ge=0)  # 排序
+    is_disable: int = Field(alias='isDisable', ge=0, le=1)  # 是否禁用: [0=否, 1=是]
 
 
 class SystemLoginIn(BaseModel):
@@ -23,38 +39,24 @@ class SystemLogoutIn(BaseModel):
     token: str  # 令牌
 
 
-class SystemAuthAdminListIn(BaseModel):
+class SystemUserListIn(BaseModel):
     """管理员列表参数"""
     username: Union[str, None] = Query(default=None)  # 账号
     nickname: Union[str, None] = Query(default=None)  # 昵称
     role: Union[int, None] = Query(default=None)  # 角色ID
 
 
-class SystemAuthAdminDetailIn(BaseModel):
+class SystemUserDetailIn(BaseModel):
     """管理员详情参数"""
     id: int = Query(gt=0)  # 主键
 
 
-class SystemAuthAdminCreateIn(BaseModel):
-    """管理员新增参数"""
-    role_ids: List[int] = Field(alias='roleIds')  # 角色ID
-    dept_ids: List[int] = Field(alias='deptIds')  # 部门ID
-    post_ids: List[int] = Field(alias='postIds')  # 岗位ID
-    username: str = Field(min_length=2, max_length=20)  # 账号
-    nickname: str = Field(min_length=2, max_length=30)  # 昵称
-    password: str  # 密码
-    avatar: str  # 头像
-    sort: int = Field(ge=0)  # 排序
-    is_disable: int = Field(alias='isDisable', ge=0, le=1)  # 是否禁用: [0=否, 1=是]
-    is_multipoint: int = Field(alias='isMultipoint', ge=0, le=1)  # 多端登录: [0=否, 1=是]
-
-
-class SystemAuthAdminEditIn(SystemAuthAdminCreateIn):
+class SystemUserEditIn(SystemUserCreateIn):
     """管理员编辑参数"""
     id: int = Field(gt=0)  # 主键
 
 
-class SystemAuthAdminUpdateIn(BaseModel):
+class SystemUserUpdateIn(BaseModel):
     """管理员更新参数"""
     avatar: str  # 头像
     nickname: str = Field(min_length=2, max_length=30)  # 昵称
@@ -62,17 +64,17 @@ class SystemAuthAdminUpdateIn(BaseModel):
     curr_password: str = Field(alias='currPassword', min_length=6, max_length=32)  # 当前密码
 
 
-class SystemAuthAdminDelIn(BaseModel):
+class SystemUserDelIn(BaseModel):
     """管理员删除参数"""
     id: int = Field(gt=0)  # 主键
 
 
-class SystemAuthAdminDisableIn(BaseModel):
+class SystemUserDisableIn(BaseModel):
     """管理员状态切换参数"""
     id: int = Field(gt=0)  # 主键
 
 
-class SystemAuthAdminOut(BaseModel):
+class SystemUserOut(BaseModel):
     """管理员返回信息"""
     id: int  # 主键
     username: str  # 账号
@@ -88,7 +90,7 @@ class SystemAuthAdminOut(BaseModel):
     updateTime: datetime = Field(alias='update_time')  # 更新时间
 
     class Config:
-        orm_mode = True
+        from_attributes = True
 
     # def __init__(self, avatar, **kwargs):  #     super().__init__(avatar=avatar, **kwargs)
 
@@ -110,7 +112,7 @@ class SystemAuthAdminDetailOut(BaseModel):
     updateTime: datetime = Field(alias='update_time')  # 更新时间
 
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 
 class SystemAuthAdminSelfOneOut(BaseModel):
@@ -129,7 +131,7 @@ class SystemAuthAdminSelfOneOut(BaseModel):
     updateTime: datetime = Field(alias='update_time')  # 更新时间
 
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 
 class SystemAuthAdminSelfOut(BaseModel):
@@ -138,7 +140,7 @@ class SystemAuthAdminSelfOut(BaseModel):
     permissions: List[str]  # 权限集合: [[*]=>所有权限, ['article:add']=>部分权限]
 
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 
 class SystemAuthRoleDetailIn(BaseModel):
@@ -173,7 +175,7 @@ class SystemAuthRoleOut(BaseModel):
     updateTime: datetime = Field(alias='update_time')  # 更新时间
 
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 
 class SystemAuthRoleDetailOut(SystemAuthRoleOut):
@@ -185,64 +187,7 @@ class SystemAuthRoleDetailOut(SystemAuthRoleOut):
     isDisable: int = Field(alias='is_disable')  # 是否禁用: [0=否, 1=是]
 
     class Config:
-        orm_mode = True
-
-
-class SystemAuthMenuDetailIn(BaseModel):
-    """菜单详情参数"""
-    id: int = Query(gt=0)  # 主键
-
-
-class SystemAuthMenuCreateIn(BaseModel):
-    """新增菜单参数"""
-    pid: int = Field(ge=0)  # 上级菜单
-    menu_type: Literal['D', 'M', 'B'] = Field(alias='menuType')  # 权限类型: [D=目录, M=菜单, B=按钮]
-    menu_name: str = Field(alias='menuName', min_length=1, max_length=30)  # 菜单名称
-    menu_icon: Union[str, None] = Field(alias='menuIcon', max_length=100)  # 菜单图标
-    menu_sort: int = Field(alias='menuSort', ge=0)  # 菜单排序
-    perms: Union[str, None] = Field(max_length=100)  # 权限标识
-    paths: Union[str, None] = Field(max_length=200)  # 路由地址
-    component: Union[str, None] = Field(max_length=200)  # 前端组件
-    selected: Union[str, None] = Field(max_length=200)  # 选中路径
-    params: Union[str, None] = Field(max_length=200)  # 路由参数
-    is_cache: int = Field(alias='isCache', ge=0, le=1)  # 是否缓存: [0=否, 1=是]
-    is_show: int = Field(alias='isShow', ge=0, le=1)  # 是否显示: [0=否, 1=是]
-    is_disable: int = Field(alias='isDisable', ge=0, le=1)  # 是否禁用: [0=否, 1=是]
-
-
-class SystemAuthMenuEditIn(SystemAuthMenuCreateIn):
-    """编辑菜单参数"""
-    id: int = Field(gt=0)  # 主键
-
-
-class SystemAuthMenuDelIn(BaseModel):
-    """删除菜单参数"""
-    id: int = Field(gt=0)  # 主键
-
-
-class SystemAuthMenuOut(BaseModel):
-    """系统菜单返回信息"""
-    id: int  # 主键
-    pid: int  # 上级菜单
-    menuType: str = Field(alias='menu_type')  # 权限类型: [M=目录, C=菜单, A=按钮]
-    menuName: str = Field(alias='menu_name')  # 菜单名称
-    menuIcon: str = Field(alias='menu_icon')  # 菜单图标
-    menuSort: int = Field(alias='menu_sort')  # 菜单排序
-    perms: str  # 权限标识
-    paths: str  # 路由地址
-    component: str  # 前端组件
-    selected: str  # 选中路径
-    params: str  # 路由参数
-    isCache: int = Field(alias='is_cache')  # 是否缓存: [0=否, 1=是]
-    isShow: int = Field(alias='is_show')  # 是否显示: [0=否, 1=是]
-    isDisable: int = Field(alias='is_disable')  # 是否禁用: [0=否, 1=是]
-    createTime: datetime = Field(alias='create_time')  # 创建时间
-    updateTime: datetime = Field(alias='update_time')  # 更新时间
-    children: Union[List['SystemAuthMenuOut'], None]  # 子集
-
-    class Config:
-        orm_mode = True
-
+        from_attributes = True
 
 class SystemAuthPostOut(BaseModel):
     """
@@ -258,7 +203,7 @@ class SystemAuthPostOut(BaseModel):
     updateTime: datetime = Field(alias='update_time')
 
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 
 class SystemAuthPostAddIn(BaseModel):
@@ -308,7 +253,7 @@ class SystemAuthDeptOut(BaseModel):
     updateTime: datetime = Field(alias='update_time')
 
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 
 class SystemAuthDeptDetailIn(BaseModel):
@@ -368,7 +313,7 @@ class SystemLogOperateOut(BaseModel):
     createTime: datetime = Field(alias='create_time')  # 创建时间
 
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 
 class SystemLogLoginIn(BaseModel):
@@ -390,4 +335,4 @@ class SystemLogLoginOut(BaseModel):
     createTime: datetime = Field(alias='create_time')  # 创建时间
 
     class Config:
-        orm_mode = True
+        from_attributes = True

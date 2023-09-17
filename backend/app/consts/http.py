@@ -2,7 +2,7 @@ import inspect
 from collections import namedtuple
 from datetime import datetime
 from functools import wraps
-from typing import TypeVar, Callable
+from typing import TypeVar, Callable, Generic
 
 import pytz
 from fastapi.encoders import jsonable_encoder
@@ -32,7 +32,9 @@ class HttpResp:
     SYSTEM_ERROR = HttpCode(500, '系统错误')
     SYSTEM_TIMEOUT_ERROR = HttpCode(504, '请求超时')
 
+
 RT = TypeVar('RT')  # 返回类型
+
 
 def unified_resp(func: Callable[..., RT]) -> Callable[..., RT]:
     """统一响应格式
@@ -58,3 +60,34 @@ def unified_resp(func: Callable[..., RT]) -> Callable[..., RT]:
         )
 
     return wrapper
+
+
+T = TypeVar("T")
+
+
+class AppResponse(JSONResponse):
+
+    def __init__(self, code: int, msg: str, data = None):
+        super().__init__(
+            jsonable_encoder(
+                {
+                    "code": code,
+                    'msg': msg,
+                    'data': data
+                }, by_alias=False,
+                # 自定义日期时间格式编码器
+                custom_encoder={
+                    datetime: lambda dt: dt.replace(tzinfo=pytz.utc).astimezone(pytz.timezone("Asia/Shanghai"))
+                    .strftime("%Y-%m-%d %H:%M:%S")
+                }
+            ),
+            media_type='application/json;charset=utf-8'
+        )
+
+    @classmethod
+    def success(cls, data) -> "AppResponse":
+        return cls(HttpResp.SUCCESS.code, HttpResp.SUCCESS.msg, data)
+
+    @classmethod
+    def failure(cls, http_resp: HttpResp) -> "AppResponse":
+        return cls(http_resp.FAILED.code, http_resp.FAILED.msg)
