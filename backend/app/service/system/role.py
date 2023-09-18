@@ -2,39 +2,43 @@ from abc import ABC, abstractmethod
 from datetime import datetime
 from typing import List
 
+import pydantic
 from fastapi import Depends
 from fastapi_pagination.bases import AbstractPage
+from fastapi_pagination.ext.sqlalchemy import paginate
+from pydantic import TypeAdapter
 from sqlalchemy import select, insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.deps.database import get_db
 from app.models import SystemRole, SystemMenu
-from app.schemas.system import SystemAuthRoleOut, SystemAuthRoleDetailOut, SystemAuthRoleCreateIn, SystemAuthRoleEditIn
+from app.schemas.base import Page
+from app.schemas.role import *
 from app.service.system import menu
 from app.service.system.menu import ISystemMenuService
 
 
-class ISystemAuthRoleService(ABC):
+class ISystemRoleService(ABC):
     """系统角色服务抽象类"""
 
     @abstractmethod
-    async def all(self) -> List[SystemAuthRoleOut]:
+    async def all(self) -> List[SystemRoleOut]:
         pass
 
     @abstractmethod
-    async def list(self) -> AbstractPage[SystemAuthRoleDetailOut]:
+    async def list(self, list_in: SystemRoleListIn) -> AbstractPage[SystemRoleDetailOut]:
         pass
 
     @abstractmethod
-    async def detail(self, id_: int) -> SystemAuthRoleDetailOut:
+    async def detail(self, id_: int) -> SystemRoleDetailOut:
         pass
 
     @abstractmethod
-    async def add(self, create_in: SystemAuthRoleCreateIn):
+    async def add(self, create_in: SystemRoleCreateIn):
         pass
 
     @abstractmethod
-    async def edit(self, edit_in: SystemAuthRoleEditIn):
+    async def edit(self, edit_in: SystemRoleEditIn):
         pass
 
     @abstractmethod
@@ -42,7 +46,7 @@ class ISystemAuthRoleService(ABC):
         pass
 
 
-class SystemAuthRoleService(ISystemAuthRoleService):
+class SystemRoleService(ISystemRoleService):
     """系统角色服务实现类"""
 
     async def one_or_none(self, id_: int) -> SystemRole:
@@ -50,7 +54,7 @@ class SystemAuthRoleService(ISystemAuthRoleService):
             select(SystemRole).where(SystemRole.id == id_)
         )
 
-    async def add(self, create_in: SystemAuthRoleCreateIn):
+    async def add(self, create_in: SystemRoleCreateIn):
         async with self.session.begin() as transition:
             find = await self.session.scalar(
                 select(SystemRole).where(SystemRole.name == create_in.name.strip()).limit(1)
@@ -68,53 +72,56 @@ class SystemAuthRoleService(ISystemAuthRoleService):
 
             role_id = insert_result.inserted_primary_key
 
-            menu_ids = create_in.menu_ids.strip().split(",")
+            menu_ids = list(map(lambda x: int(x), create_in.menu_ids.strip().split(",")))
             if len(menu_ids) > 0:
-                menus = await self.menu_service.select_menu_by_ids(list(map(lambda x: int(x), menu_ids)))
-                for m in menus:
+                q_menus = await self.session.execute(
+                    select(SystemMenu).with_only_columns(SystemMenu.id).where(SystemMenu.id.in_(menu_ids))
+                )
+                for m_row in q_menus.all():
+                    menu_id = m_row[0]
                     await self.session.execute(
                         insert(SystemMenu).values({
                             'role_id': role_id,
-                            'menu_id': int(m.id)
+                            'menu_id': menu_id
                         })
                     )
-
             await transition.commit()
 
-    async def all(self) -> List[SystemAuthRoleOut]:
+    async def all(self) -> List[SystemRoleOut]:
         """角色所有"""
-        roles = await db.fetch_all(
-            system_auth_role.select()
-            .order_by(system_auth_role.c.sort.desc(), system_auth_role.c.id.desc()))
-        return pydantic.parse_obj_as(List[SystemAuthRoleOut], roles)
+        scalar_result = await self.session.scalars(
+            select(SystemRole).order_by(SystemRole.sort.desc())
+        )
+        return TypeAdapter(List[SystemRoleOut]).validate_python(scalar_result.all())
 
-    async def list(self) -> AbstractPage[SystemAuthRoleDetailOut]:
+    async def list(self, list_in: SystemRoleListIn) -> Page[SystemRoleDetailOut]:
         """角色列表"""
-        query = system_auth_role.select() \
-            .order_by(system_auth_role.c.sort.desc(), system_auth_role.c.id.desc())
-        pager = await paginate(db, query)
-        for obj in pager.lists:
-            obj.member = await self.get_member_cnt(obj.id)
-        return pager
 
-    async def get_member_cnt(self, role_id: int):
-        """根据角色ID获取成员数量"""
-        return await db.fetch_val(
-            select(func.count(system_auth_admin.c.id))
-            .where(func.find_in_set(role_id, system_auth_admin.c.role_ids), system_auth_admin.c.is_delete == 0))
+        async def convert(sequence):
+            return [TypeAdapter(SystemRoleDetailOut).validate_python(x) for x in sequence]
 
-    async def detail(self, id_: int) -> SystemAuthRoleDetailOut:
+        return await paginate(
+            self.session,
+            select(SystemRole).order_by(SystemRole.sort.desc()),
+            params=list_in,
+            transformer=convert
+        )
+
+    async def detail(self, id_: int) -> SystemRoleDetailOut:
         """角色详情"""
+        one_result = await self.session.get(SystemRole, id_)
+
+
         role = await db.fetch_one(system_auth_role.select().where(system_auth_role.c.id == id_).limit(1))
         assert role, '角色已不存在!'
         role_id = role.id
         role_dict = dict(role)
         role_dict['member'] = await self.get_member_cnt(role_id)
         role_dict['menus'] = await self.auth_perm_service.select_menu_ids_by_role_id([role_id])
-        return SystemAuthRoleDetailOut(**role_dict)
+        return SystemRoleDetailOut(**role_dict)
 
     @db.transaction()
-    async def edit(self, edit_in: SystemAuthRoleEditIn):
+    async def edit(self, edit_in: SystemRoleEditIn):
         """编辑角色"""
         assert await db.fetch_one(
             system_auth_role.select().where(system_auth_role.c.id == edit_in.id)
@@ -155,4 +162,4 @@ class SystemAuthRoleService(ISystemAuthRoleService):
 
 def get_instance(session: AsyncSession = Depends(get_db),
                  menu_service: ISystemMenuService = Depends(menu.get_instance)):
-    return SystemAuthRoleService(session, menu_service)
+    return SystemRoleService(session, menu_service)

@@ -1,5 +1,6 @@
 import datetime
 from abc import ABC, abstractmethod
+from typing import Union
 
 from fastapi import Request, Depends
 from fastapi_pagination.bases import AbstractPage
@@ -105,7 +106,7 @@ class SystemUserService(ISystemUserService):
         find_user = await self.check_user_exists(admin_edit_in.id)
         assert find_user, "账号不存在"
 
-    async def check_user_exists(self, id_: int | None = None, username: str | None = None) -> SystemUser:
+    async def check_user_exists(self, id_: Union[int, None] = None, username: Union[str, None] = None) -> SystemUser:
         query = select(SystemUser)
 
         if id_:
