@@ -7,11 +7,11 @@ from fastapi import Depends
 from fastapi_pagination.bases import AbstractPage
 from fastapi_pagination.ext.sqlalchemy import paginate
 from pydantic import TypeAdapter
-from sqlalchemy import select, insert
+from sqlalchemy import select, insert, delete, update, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.deps.database import get_db
-from app.models import SystemRole, SystemMenu
+from app.deps.database import get_db, begin_transition
+from app.models import SystemRole, SystemMenu, SystemRoleMenu, SystemUserRole
 from app.schemas.base import Page
 from app.schemas.role import *
 from app.service.system import menu
@@ -56,10 +56,10 @@ class SystemRoleService(ISystemRoleService):
 
     async def add(self, create_in: SystemRoleCreateIn):
         async with self.session.begin() as transition:
-            find = await self.session.scalar(
+            find = await self.session.execute(
                 select(SystemRole).where(SystemRole.name == create_in.name.strip()).limit(1)
             )
-            assert not find, "角色名称已存在!"
+            assert not find.scalar_one_or_none(), "角色名称已存在!"
 
             role_dict = create_in.model_dump()
             role_dict['name'] = create_in.name.strip()
@@ -109,51 +109,77 @@ class SystemRoleService(ISystemRoleService):
 
     async def detail(self, id_: int) -> SystemRoleDetailOut:
         """角色详情"""
-        one_result = await self.session.get(SystemRole, id_)
+        one_result = (await self.session.execute(
+            select(SystemRole).where(SystemRole.id == id_).limit(1)
+        )).scalar_one_or_none()
+        assert one_result, "角色不存在"
 
+        role_menus = await self.session.scalars(
+            select(SystemRoleMenu.menu_id).where(SystemRoleMenu.role_id == id_)
+        )
 
-        role = await db.fetch_one(system_auth_role.select().where(system_auth_role.c.id == id_).limit(1))
-        assert role, '角色已不存在!'
-        role_id = role.id
-        role_dict = dict(role)
-        role_dict['member'] = await self.get_member_cnt(role_id)
-        role_dict['menus'] = await self.auth_perm_service.select_menu_ids_by_role_id([role_id])
+        role_dict = dict(one_result)
+        menu_ids = list(map(lambda x: x[0], role_menus.all()))
+        role_dict['menus'] = menu_ids
+
         return SystemRoleDetailOut(**role_dict)
 
-    @db.transaction()
     async def edit(self, edit_in: SystemRoleEditIn):
         """编辑角色"""
-        assert await db.fetch_one(
-            system_auth_role.select().where(system_auth_role.c.id == edit_in.id)
-            .limit(1)), '角色已不存在!'
-        assert not await db.fetch_one(
-            system_auth_role.select()
-            .where(system_auth_role.c.id != edit_in.id,
-                   system_auth_role.c.name == edit_in.name.strip())
-            .limit(1)), '角色名称已存在!'
-        role_dict = edit_in.dict()
-        role_dict['name'] = edit_in.name.strip()
-        role_dict['update_time'] = int(time.time())
-        del role_dict['menu_ids']
-        await db.execute(
-            system_auth_role.update().where(system_auth_role.c.id == edit_in.id).values(**role_dict))
-        await self.auth_perm_service.batch_delete_by_role_id(edit_in.id)
-        await self.auth_perm_service.batch_save_by_menu_ids(edit_in.id, edit_in.menu_ids)
-        await self.auth_perm_service.cache_role_menus_by_role_id(edit_in.id)
+        with begin_transition(self.session):
+            execute_result = await self.session.execute(
+                select(SystemRole).where(SystemRole.id == edit_in.id).limit(1)
+            )
 
-    @db.transaction()
+            role: SystemRole = execute_result.scalar_one_or_none()
+            assert role, "角色不存在!"
+            assert role.name != edit_in.name.strip(), "角色名称已存在"
+            # 删除所有关联的菜单
+            await self.session.execute(
+                delete(SystemRoleMenu).where(SystemRoleMenu.role_id == edit_in.id)
+            )
+            # 插入新菜单关联
+            for menu_id in edit_in.menu_ids.split(","):
+                await self.session.execute(
+                    insert(SystemRoleMenu).values(**{
+                        "role_id": edit_in.id,
+                        'menu_id': int(menu_id)
+                    })
+                )
+
+            # 更新菜单信息
+            role_dict = edit_in.model_dump()
+            role_dict['name'] = edit_in.name.strip()
+            role_dict['update_time'] = datetime.now()
+            del role_dict['menu_ids']
+
+            await self.session.execute(
+                update(SystemRole).where(SystemRole.id == edit_in.id).values(**role_dict)
+            )
+
     async def delete(self, id_: int):
         """删除角色"""
-        assert await db.fetch_one(
-            system_auth_role.select().where(system_auth_role.c.id == id_)
-            .limit(1)), '角色已不存在!'
-        assert not await db.fetch_one(
-            system_auth_admin.select()
-            .where(func.find_in_set(id_, system_auth_admin.c.role_ids), system_auth_admin.c.is_delete == 0)
-            .limit(1)), '角色已被管理员使用,请先移除'
-        await db.execute(system_auth_role.delete().where(system_auth_role.c.id == id_))
-        await self.auth_perm_service.batch_delete_by_role_id(id_)
-        await RedisUtil.hdel(AdminConfig.backstage_roles_key, str(id_))
+        with begin_transition(self.session):
+            role = (await self.session.execute(
+                select(SystemRole).where(SystemRole.id == id_).limit(1)
+            )).one_or_none()
+            assert role, "角色不存在!"
+
+            exe_result = await self.session.execute(
+                select(SystemUserRole).with_only_columns(SystemUserRole.role_id)
+                .where(SystemUserRole.role_id == id_)
+                .limit(1)
+            )
+
+            assert not exe_result.one_or_none(), "角色被用户所使用，请先同用户取消关联"
+
+            await self.session.execute(
+                delete(SystemRoleMenu).where(SystemRoleMenu.role_id == id_)
+            )
+
+            await self.session.execute(
+                delete(SystemRole).where(SystemRole.id == id_)
+            )
 
     def __init__(self, session: AsyncSession, menu_service: ISystemMenuService):
         self.session: AsyncSession = session

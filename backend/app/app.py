@@ -9,15 +9,15 @@ from app.core.exceptions import configure_exception
 
 
 def register_event(app: FastAPI):
-    from app.db.session import engine
+    from app.db.session import async_engine
 
     @app.on_event('startup')
     async def startup():
-        engine.connect()
+        async_engine.connect()
 
     @app.on_event('shutdown')
     async def shutdown():
-        engine.dispose()
+        await async_engine.dispose()
 
 
 def configure_dir(app: FastAPI):
@@ -45,5 +45,6 @@ def create_app() -> FastAPI:
     configure_dir(app)
     configuration_router(app)
     configure_exception(app)
+    register_event(app)
     add_pagination(app)
     return app

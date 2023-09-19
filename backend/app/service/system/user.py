@@ -63,12 +63,20 @@ class SystemUserService(ISystemUserService):
         self.request = request
         self.session: AsyncSession = session
 
+    async def check_user_exists(self, id_: Union[int, None] = None,
+                                username: Union[str, None] = None) -> Union[None, SystemUser]:
+        query = select(SystemUser)
+
+        if id_:
+            query = query.where(SystemUser.id == id_, SystemUser.is_delete == 0)
+        elif username:
+            query = query.where(SystemUser.username == username, SystemUser.is_delete == 0)
+
+        return await self.session.scalar(query)
+
     async def add(self, admin_create_in: SystemUserCreateIn) -> SystemUserOut:
         find_user = await self.check_user_exists(username=admin_create_in.username)
         assert not find_user, "账号已存在"
-
-        if not (6 <= len(admin_create_in.password) <= 20):
-            raise AppException(HttpResp.FAILED, msg='密码必须在6~20位')
         create_user = SystemUser()
         create_user.username = admin_create_in.username
         create_user.password = encrypt_util.make_md5(admin_create_in.password.strip())
@@ -98,29 +106,16 @@ class SystemUserService(ISystemUserService):
             )).all()
             if len(posts) > 0:
                 create_user.posts.append(posts)
-        self.session.add(create_user)
-        await self.session.commit()
+        # self.session.add(create_user)
+        # await self.session.commit()
         return TypeAdapter(SystemUserOut).validate_python(create_user)
 
     async def edit(self, admin_edit_in: SystemUserEditIn):
         find_user = await self.check_user_exists(admin_edit_in.id)
         assert find_user, "账号不存在"
 
-    async def check_user_exists(self, id_: Union[int, None] = None, username: Union[str, None] = None) -> SystemUser:
-        query = select(SystemUser)
-
-        if id_:
-            query = query.where(SystemUser.id == id_, SystemUser.is_delete == 0)
-        elif username:
-            query = query.where(SystemUser.username == username, SystemUser.is_delete == 0)
-
-        find_user = (await self.session.scalar(query))
-        assert find_user, "账号不存在"
-        return find_user
-
     async def update(self, admin_update_in: SystemUserUpdateIn, user_id: int):
         find_user = await self.check_user_exists(user_id)
-        assert find_user, "账号不存在"
 
         find_user.avatar = url_util.to_relative_url(admin_update_in.avatar)
         if admin_update_in.password:

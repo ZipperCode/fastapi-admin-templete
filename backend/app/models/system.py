@@ -25,13 +25,13 @@ class SystemUser(Base, BaseMixin, LastLoginMixin, DeleteMixin):
     sort: Mapped[int] = mapped_column(Integer, server_default=text('0'), comment='排序编号')
 
     roles: Mapped[List['SystemRole']] = relationship(
-        "SystemRole", cascade="all, delete-orphan", secondary="system_user_role", overlaps='system_user'
+        "SystemRole", cascade="all", secondary="system_user_role", overlaps='system_user', lazy=True
     )
     depts: Mapped[List['SystemDept']] = relationship(
-        'SystemDept', secondary="all, delete-orphan", secondaryjoin='system_user_dept', overlaps='system_user'
+        'SystemDept', cascade="all", secondary="system_user_dept", overlaps='system_user'
     )
-    posts: Mapped[List['SystemPost']] = relationship('SystemPost', secondary="all, delete-orphan",
-                                                     secondaryjoin='system_user_post',
+    posts: Mapped[List['SystemPost']] = relationship('SystemPost', cascade="all",
+                                                     secondary='system_user_post',
                                                      overlaps='system_user')
 
 
@@ -51,9 +51,9 @@ class SystemRole(Base, BaseMixin):
     sort: Mapped[int] = mapped_column(Integer, server_default=text('0'), comment='角色排序')
 
     # ref
-    users: Mapped[List['SystemRole']] = relationship(SystemUser, cascade="all, delete-orphan",
+    users: Mapped[List['SystemRole']] = relationship(SystemUser, cascade="all",
                                                      secondary='system_user_role', overlaps='system_role')
-    menus: Mapped[List['SystemMenu']] = relationship('SystemMenu', cascade='all, delete-orphan',
+    menus: Mapped[List['SystemMenu']] = relationship('SystemMenu', cascade='all',
                                                      secondary="system_role_menu", overlaps='system_role')
 
 
@@ -81,7 +81,7 @@ class SystemMenu(Base, BaseMixin):
                                           comment='是否显示: 0=否, 1=是')
 
     # ref
-    roles: Mapped[List[SystemRole]] = relationship(SystemRole, cascade="all, delete-orphan",
+    roles: Mapped[List[SystemRole]] = relationship(SystemRole, cascade="all",
                                                    secondary='system_role_menu', overlaps='system_menu')
 
 
@@ -111,7 +111,7 @@ class SystemDept(Base, BaseMixin):
                                             comment='是否删除: [0=否, 1=是]')
 
     # ref
-    users: Mapped[List[SystemUser]] = relationship(SystemUser, cascade="all, delete-orphan",
+    users: Mapped[List[SystemUser]] = relationship(SystemUser, cascade="all",
                                                    secondary='system_user_dept', overlaps='system_dept')
 
 
@@ -136,7 +136,7 @@ class SystemPost(Base, BaseMixin, DeleteMixin):
     sort: Mapped[int] = mapped_column(Integer, server_default=text('0'), comment='排序编号')
 
     # ref
-    users: Mapped[List[SystemUser]] = relationship(SystemUser, cascade="all, delete-orphan",
+    users: Mapped[List[SystemUser]] = relationship(SystemUser, cascade="all",
                                                    secondary='system_user_post', overlaps='system_post')
 
 

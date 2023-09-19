@@ -1,17 +1,18 @@
 from datetime import datetime, date
 from typing import List, Union, Any, Annotated
-from typing_extensions import Literal
 
 from fastapi import Query
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, FieldValidationInfo, field_serializer
 
-from app.consts.http import HttpResp
-from app.core.exceptions import AppException
+from app.schemas.base import DATE_TIME_FMT, DateTime
 from app.schemas.validators.user import PasswordValidator
 
 
 class SystemUserCreateIn(BaseModel):
-    """管理员新增参数"""
+    """
+    管理员新增参数
+    :param role_ids 角色id列表
+    """
     role_ids: List[int] = Field(alias='roleIds')  # 角色ID
     dept_ids: List[int] = Field(alias='deptIds')  # 部门ID
     post_ids: List[int] = Field(alias='postIds')  # 岗位ID
@@ -20,7 +21,13 @@ class SystemUserCreateIn(BaseModel):
     password: Annotated[str, PasswordValidator]  # 密码
     avatar: str  # 头像
     sort: int = Field(ge=0)  # 排序
+
     is_disable: int = Field(alias='isDisable', ge=0, le=1)  # 是否禁用: [0=否, 1=是]
+
+    @field_validator("role_ids", "dept_ids", "post_ids")
+    @classmethod
+    def ids_filter_zero(cls, v: List[int]) -> List[int]:
+        return list(filter(lambda x: x > 0, v))
 
 
 class SystemLoginIn(BaseModel):
@@ -78,21 +85,19 @@ class SystemUserOut(BaseModel):
     """管理员返回信息"""
     id: int  # 主键
     username: str  # 账号
-    nickname: str  # 昵称
+    nickname: Union[str, None]  # 昵称
     avatar: str  # 头像
     role: Union[str, None]  # 角色
     dept: Union[str, None]  # 部门
     isMultipoint: int = Field(alias='is_multipoint')  # 多端登录: [0=否, 1=是]
     isDisable: int = Field(alias='is_disable')  # 是否禁用: [0=否, 1=是]
     lastLoginIp: str = Field(alias='last_login_ip')  # 最后登录IP
-    lastLoginTime: datetime = Field(alias='last_login_time')  # 最后登录时间
-    createTime: datetime = Field(alias='create_time')  # 创建时间
-    updateTime: datetime = Field(alias='update_time')  # 更新时间
+    lastLoginTime: DateTime = Field(alias='last_login_time')  # 最后登录时间
+    createTime: DateTime = Field(alias='create_time')  # 创建时间
+    updateTime: DateTime = Field(alias='update_time')  # 更新时间
 
     class Config:
         from_attributes = True
-
-    # def __init__(self, avatar, **kwargs):  #     super().__init__(avatar=avatar, **kwargs)
 
 
 class SystemAuthAdminDetailOut(BaseModel):
@@ -107,9 +112,9 @@ class SystemAuthAdminDetailOut(BaseModel):
     isMultipoint: int = Field(alias='is_multipoint')  # 多端登录: [0=否, 1=是]
     isDisable: int = Field(alias='is_disable')  # 是否禁用: [0=否, 1=是]
     lastLoginIp: str = Field(alias='last_login_ip')  # 最后登录IP
-    lastLoginTime: datetime = Field(alias='last_login_time')  # 最后登录时间
-    createTime: datetime = Field(alias='create_time')  # 创建时间
-    updateTime: datetime = Field(alias='update_time')  # 更新时间
+    lastLoginTime: DateTime = Field(alias='last_login_time')  # 最后登录时间
+    createTime: DateTime = Field(alias='create_time')  # 创建时间
+    updateTime: DateTime = Field(alias='update_time')  # 更新时间
 
     class Config:
         from_attributes = True
@@ -146,6 +151,7 @@ class SystemAuthAdminSelfOut(BaseModel):
 class SystemAuthRoleDetailIn(BaseModel):
     """角色详情参数"""
     id: int = Query(gt=0)  # 主键
+
 
 class SystemAuthPostOut(BaseModel):
     """
