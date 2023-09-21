@@ -3,7 +3,7 @@ from typing import TypeVar, Generic, Sequence, Union, Annotated
 
 from fastapi import Query
 from fastapi_pagination.bases import AbstractParams, RawParams, AbstractPage
-from pydantic import BaseModel, WrapSerializer
+from pydantic import BaseModel, WrapSerializer, PlainSerializer
 
 T = TypeVar("T")
 C = TypeVar("C")
@@ -11,7 +11,7 @@ C = TypeVar("C")
 DATE_TIME_FMT = "%Y-%m-%d %H:%M:%S"
 
 DateTime = Annotated[
-    datetime,  WrapSerializer(lambda dt: dt.strftime(DATE_TIME_FMT), return_type=str, when_used='json')
+    datetime,  PlainSerializer(lambda dt: dt.strftime(DATE_TIME_FMT), return_type=str, when_used='json')
 ]
 
 class PageParams(BaseModel, AbstractParams):

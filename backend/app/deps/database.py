@@ -1,22 +1,27 @@
+from typing import AsyncGenerator
+
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.session import AsyncSessionLocal
 
 
 async def get_db():
+    yield AsyncSessionLocal()
+
+
+async def with_transition(session: AsyncSession):
+    try:
+        yield session
+        await session.commit()
+    except Exception as e:
+        await session.rollback()
+        raise e
+
+
+async def begin_transition() -> AsyncGenerator:
     async with AsyncSessionLocal() as session:
         try:
-            yield session
-        except Exception:
-            session.rollback()
-            raise
-
-
-async def begin_transition(session: AsyncSession):
-    async with session.begin() as transition:
-        try:
             yield
-            await transition.commit()
         except Exception as e:
-            await transition.rollback()
+            await session.rollback()
             raise e

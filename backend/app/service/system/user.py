@@ -13,7 +13,7 @@ from sqlalchemy.sql.operators import add
 from app.consts.http import HttpResp
 from app.core.exceptions import AppException
 from app.db.session import AsyncSessionLocal
-from app.deps.database import get_db
+from app.deps.database import get_db, begin_transition, with_transition
 from app.models import SystemUser, SystemRole, SystemDept, SystemPost
 from app.schemas.system import SystemUserCreateIn, SystemUserUpdateIn, SystemUserListIn, SystemUserOut, SystemUserEditIn
 
@@ -77,38 +77,45 @@ class SystemUserService(ISystemUserService):
     async def add(self, admin_create_in: SystemUserCreateIn) -> SystemUserOut:
         find_user = await self.check_user_exists(username=admin_create_in.username)
         assert not find_user, "账号已存在"
-        create_user = SystemUser()
-        create_user.username = admin_create_in.username
-        create_user.password = encrypt_util.make_md5(admin_create_in.password.strip())
-        create_user.avatar = url_util.to_relative_url(admin_create_in.avatar) \
-            if admin_create_in.avatar else '/api/static/backend_avatar.png'
-        create_user.is_disable = admin_create_in.is_disable
-        create_user.create_time = datetime.datetime.now()
-        create_user.update_time = datetime.datetime.now()
-        if len(admin_create_in.role_ids) > 0:
-            # role
-            roles = (await self.session.scalars(
-                select(SystemRole).where(SystemRole.id.in_(admin_create_in.role_ids))
-            )).all()
-            if len(roles) > 0:
-                create_user.roles.append(roles)
 
-        if len(admin_create_in.dept_ids) > 0:
-            # dept
-            depts = (await self.session.scalars(
-                select(SystemDept).where(SystemDept.id.in_(admin_create_in.dept_ids))
-            )).all()
-            if len(depts) > 0:
-                create_user.depts.append(depts)
-        if len(admin_create_in.post_ids) > 0:
-            posts = (await self.session.scalars(
-                select(SystemPost).where(SystemPost.id.in_(admin_create_in.post_ids))
-            )).all()
-            if len(posts) > 0:
-                create_user.posts.append(posts)
-        # self.session.add(create_user)
-        # await self.session.commit()
-        return TypeAdapter(SystemUserOut).validate_python(create_user)
+        async with AsyncSessionLocal() as session:
+            create_user = SystemUser()
+            create_user.username = admin_create_in.username
+            create_user.password = encrypt_util.make_md5(admin_create_in.password.strip())
+            create_user.avatar = url_util.to_relative_url(admin_create_in.avatar) \
+                if admin_create_in.avatar else '/api/static/backend_avatar.png'
+            create_user.is_disable = admin_create_in.is_disable
+            create_user.create_time = datetime.datetime.now()
+            create_user.update_time = datetime.datetime.now()
+            if len(admin_create_in.role_ids) > 0:
+                # role
+                roles = (await session.scalars(
+                    select(SystemRole).where(SystemRole.id.in_(admin_create_in.role_ids))
+                )).all()
+                if len(roles) > 0:
+                    create_user.roles.append(roles)
+
+            if len(admin_create_in.dept_ids) > 0:
+                # dept
+                depts = (await session.scalars(
+                    select(SystemDept).where(SystemDept.id.in_(admin_create_in.dept_ids))
+                )).all()
+                if len(depts) > 0:
+                    create_user.depts.append(depts)
+            if len(admin_create_in.post_ids) > 0:
+                posts = (await session.scalars(
+                    select(SystemPost).where(SystemPost.id.in_(admin_create_in.post_ids))
+                )).all()
+                if len(posts) > 0:
+                    create_user.posts.append(posts)
+
+            session.add(create_user)
+            await session.commit()
+            await session.refresh(create_user)
+            user = await session.scalar(select(SystemUser).where(SystemUser.username == create_user.username))
+            return SystemUserOut.model_validate(
+                await session.scalar(select(SystemUser).where(SystemUser.username == create_user.username))
+            )
 
     async def edit(self, admin_edit_in: SystemUserEditIn):
         find_user = await self.check_user_exists(admin_edit_in.id)

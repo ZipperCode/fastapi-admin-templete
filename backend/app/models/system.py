@@ -25,14 +25,14 @@ class SystemUser(Base, BaseMixin, LastLoginMixin, DeleteMixin):
     sort: Mapped[int] = mapped_column(Integer, server_default=text('0'), comment='排序编号')
 
     roles: Mapped[List['SystemRole']] = relationship(
-        "SystemRole", cascade="all", secondary="system_user_role", overlaps='system_user', lazy=True
+        "SystemRole", cascade="all", secondary="system_user_role", overlaps='users', lazy=True
     )
     depts: Mapped[List['SystemDept']] = relationship(
-        'SystemDept', cascade="all", secondary="system_user_dept", overlaps='system_user'
+        'SystemDept', cascade="all", secondary="system_user_dept", overlaps='users'
     )
     posts: Mapped[List['SystemPost']] = relationship('SystemPost', cascade="all",
                                                      secondary='system_user_post',
-                                                     overlaps='system_user')
+                                                     overlaps='users')
 
 
 class SystemRole(Base, BaseMixin):
@@ -52,9 +52,9 @@ class SystemRole(Base, BaseMixin):
 
     # ref
     users: Mapped[List['SystemRole']] = relationship(SystemUser, cascade="all",
-                                                     secondary='system_user_role', overlaps='system_role')
+                                                     secondary='system_user_role', overlaps='roles')
     menus: Mapped[List['SystemMenu']] = relationship('SystemMenu', cascade='all',
-                                                     secondary="system_role_menu", overlaps='system_role')
+                                                     secondary="system_role_menu", overlaps='roles')
 
 
 class SystemUserRole(Base, BaseMixin):
@@ -112,7 +112,7 @@ class SystemDept(Base, BaseMixin):
 
     # ref
     users: Mapped[List[SystemUser]] = relationship(SystemUser, cascade="all",
-                                                   secondary='system_user_dept', overlaps='system_dept')
+                                                   secondary='system_user_dept', overlaps='depts')
 
 
 class SystemUserDept(Base, BaseMixin):
@@ -137,7 +137,7 @@ class SystemPost(Base, BaseMixin, DeleteMixin):
 
     # ref
     users: Mapped[List[SystemUser]] = relationship(SystemUser, cascade="all",
-                                                   secondary='system_user_post', overlaps='system_post')
+                                                   secondary='system_user_post', overlaps='posts')
 
 
 class SystemUserPost(Base, BaseMixin):

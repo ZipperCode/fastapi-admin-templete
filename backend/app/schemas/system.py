@@ -2,9 +2,9 @@ from datetime import datetime, date
 from typing import List, Union, Any, Annotated
 
 from fastapi import Query
-from pydantic import BaseModel, Field, field_validator, FieldValidationInfo, field_serializer
+from pydantic import BaseModel, Field, field_validator
 
-from app.schemas.base import DATE_TIME_FMT, DateTime
+from app.schemas.base import DateTime
 from app.schemas.validators.user import PasswordValidator
 
 
@@ -89,10 +89,9 @@ class SystemUserOut(BaseModel):
     avatar: str  # 头像
     role: Union[str, None]  # 角色
     dept: Union[str, None]  # 部门
-    isMultipoint: int = Field(alias='is_multipoint')  # 多端登录: [0=否, 1=是]
     isDisable: int = Field(alias='is_disable')  # 是否禁用: [0=否, 1=是]
-    lastLoginIp: str = Field(alias='last_login_ip')  # 最后登录IP
-    lastLoginTime: DateTime = Field(alias='last_login_time')  # 最后登录时间
+    lastLoginIp: Union[str, None] = Field(alias='last_login_ip')  # 最后登录IP
+    lastLoginTime: Union[DateTime, None] = Field(alias='last_login_time')  # 最后登录时间
     createTime: DateTime = Field(alias='create_time')  # 创建时间
     updateTime: DateTime = Field(alias='update_time')  # 更新时间
 
